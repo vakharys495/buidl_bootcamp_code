@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cryptographic Operations</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+      background-color: #f4f4f4;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    .input-section {
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    input {
+      padding: 8px;
+      margin: 5px;
+      width: 200px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      padding: 10px 20px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    #output {
+      background-color: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+    #output p {
+      margin: 10px 0;
+      word-wrap: break-word;
+    }
+    .error {
+      color: red;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>Cryptographic Operations</h1>
+  <div class="input-section">
+    <input type="text" id="firstName" placeholder="First Name" required>
+    <input type="text" id="lastName" placeholder="Last Name" required>
+    <br>
+    <button onclick="runCrypto()">Generate and Verify</button>
+  </div>
+  <div id="output"></div>
+
+  <script>
+    // Function to convert ArrayBuffer to hexadecimal string
+    function bufferToHex(buffer) {
+      return Array.from(new Uint8Array(buffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+    }
+
+    // Main async function to perform cryptographic operations
+    async function cryptoOperations(firstName, lastName) {
+      try {
+        // Step 1: Create a Private Key (and Public Key pair)
+        const keyPair = await crypto.subtle.generateKey(
+          {
+            name: 'ECDSA',
+            namedCurve: 'P-256',
+          },
+          true,
+          ['sign', 'verify']
+        );
+
+        // Step 2: Derive Public Key
+        const publicKey = keyPair.publicKey;
+        const privateKey = keyPair.privateKey;
+
+        // Export public key to raw format
+        const publicKeyRaw = await crypto.subtle.exportKey('raw', publicKey);
+        const publicKeyHex = bufferToHex(publicKeyRaw);
+
+        // Step 3: Generate Address (simplified)
+        const publicKeyHash = await crypto.subtle.digest('SHA-256', publicKeyRaw);
+        const address = bufferToHex(publicKeyHash).slice(0, 40);
+
+        // Step 4: Create Message
+        const message = `My name is ${firstName} ${lastName}`;
+
+        // Step 5: Hash the Message
+        const msgBuffer = new TextEncoder().encode(message);
+        const msgHash = await crypto.subtle.digest('SHA-256', msgBuffer);
+        const msgHashHex = bufferToHex(msgHash);
+
+        // Step 6: Create Digital Signature
+        const signature = await crypto.subtle.sign(
+          {
+            name: 'ECDSA',
+            hash: { name: 'SHA-256' },
+          },
+          privateKey,
+          msgHash
+        );
+        const signatureHex = bufferToHex(signature);
+
+        // Step 7: Verify the Digital Signature
+        const isValid = await crypto.subtle.verify(
+          {
+            name: 'ECDSA',
+            hash: { name: 'SHA-256' },
+          },
+          publicKey,
+          signature,
+          msgHash
+        );
+
+        // Return results for display
+        return {
+          publicKey: publicKeyHex,
+          address,
+          message,
+          messageHash: msgHashHex,
+          signature: signatureHex,
+          isValid,
+        };
+      } catch (error) {
+        throw new Error('Cryptographic operation failed: ' + error.message);
+      }
+    }
+
+    // Function to run crypto operations and update UI
+    async function runCrypto() {
+      const firstName = document.getElementById('firstName').value.trim();
+      const lastName = document.getElementById('lastName').value.trim();
+      const outputDiv = document.getElementById('output');
+
+      // Input validation
+      if (!firstName || !lastName) {
+        outputDiv.innerHTML = '<p class="error">Please enter both first and last names.</p>';
+        return;
+      }
+
+      outputDiv.innerHTML = '<p>Processing...</p>';
+
+      try {
+        const result = await cryptoOperations(firstName, lastName);
+        outputDiv.innerHTML = `
+          <p><strong>Public Key (hex):</strong> ${result.publicKey}</p>
+          <p><strong>Address:</strong> ${result.address}</p>
+          <p><strong>Message:</strong> ${result.message}</p>
+          <p><strong>Message Hash (hex):</strong> ${result.messageHash}</p>
+          <p><strong>Digital Signature (hex):</strong> ${result.signature}</p>
+          <p><strong>Signature Verification:</strong> ${result.isValid ? 'Valid' : 'Invalid'}</p>
+        `;
+      } catch (error) {
+        outputDiv.innerHTML = `<p class="error">${error.message}</p>`;
+      }
+    }
+  </script>
+</body>
+</html>
